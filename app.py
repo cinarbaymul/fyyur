@@ -5,17 +5,27 @@
 import json
 import dateutil.parser
 import babel
+from flask import (
+  Flask,
+  render_template,
+  request,
+  flash,
+  redirect,
+  url_for
+)
 from flask import Flask, render_template, request, Response, flash, redirect, url_for
 from flask_moment import Moment
 from flask_sqlalchemy import SQLAlchemy
 import logging
 from logging import Formatter, FileHandler
-from flask_wtf import Form
+from flask_wtf import FlaskForm
 from forms import *
 from flask_migrate import Migrate
 import sys
 from sqlalchemy import func
 from datetime import datetime
+
+
 
 # ----------------------------------------------------------------------------#
 # App Config.
@@ -24,58 +34,17 @@ from datetime import datetime
 app = Flask(__name__)
 moment = Moment(app)
 app.config.from_object("config")
-db = SQLAlchemy(app)
+db = SQLAlchemy()
+db.init_app(app)
 migrate = Migrate(app, db)
+
 
 
 # ----------------------------------------------------------------------------#
 # Models.
 # ----------------------------------------------------------------------------#
 
-
-class Venue(db.Model):
-    __tablename__ = "Venue"
-
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String)
-    city = db.Column(db.String(120))
-    state = db.Column(db.String(120))
-    address = db.Column(db.String(120))
-    phone = db.Column(db.String(120))
-    website = db.Column(db.String(120))
-    image_link = db.Column(db.String(500))
-    facebook_link = db.Column(db.String(120))
-    genres = db.Column(db.ARRAY(db.String()))
-    seeking_talent = db.Column(db.Boolean, default=False)
-    seeking_description = db.Column(db.String)
-    shows = db.relationship("Show", backref="venue", lazy=True)
-
-
-class Artist(db.Model):
-    __tablename__ = "Artist"
-
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String)
-    city = db.Column(db.String(120))
-    state = db.Column(db.String(120))
-    phone = db.Column(db.String(120))
-    website = db.Column(db.String(120))
-    genres = db.Column(db.ARRAY(db.String()))
-    image_link = db.Column(db.String(500))
-    facebook_link = db.Column(db.String(120))
-    seeking_venue = db.Column(db.Boolean, default=False)
-    seeking_description = db.Column(db.String)
-    shows = db.relationship("Show", backref="artist", lazy=True)
-
-
-class Show(db.Model):
-    __tablename__ = "Shows"
-
-    id = db.Column(db.Integer, primary_key=True)
-    venue_id = db.Column(db.Integer, db.ForeignKey("Venue.id"), primary_key=False)
-    artist_id = db.Column(db.Integer, db.ForeignKey("Artist.id"), primary_key=False)
-    start_time = db.Column(db.DateTime)
-
+from models import *
 
 # ----------------------------------------------------------------------------#
 # Filters.
@@ -100,7 +69,9 @@ app.jinja_env.filters["datetime"] = format_datetime
 
 @app.route("/")
 def index():
-    return render_template("pages/home.html")
+    venues = Venue.query.order_by(Venue.created_date).limit(10).all()
+    artists = Artist.query.order_by(Artist.created_date).limit(10).all()
+    return render_template("pages/home.html", venues=venues, artists=artists)
 
 
 #  Venues
@@ -246,44 +217,21 @@ def create_venue_form():
 
 @app.route("/venues/create", methods=["POST"])
 def create_venue_submission():
+    form = VenueForm(request.form)
 
-    name = request.form["name"]
-    city = request.form["city"]
-    state = request.form["state"]
-    address = request.form["address"]
-    phone = request.form["phone"]
-    genres = request.form.getlist("genres")
-    image_link = request.form["image_link"]
-    facebook_link = request.form["facebook_link"]
-    website = request.form["website_link"]
-    if "seeking_talent" in request.form:
-        seeking_talent = True
-    else:
-        seeking_talent = False
-
-    seeking_description = request.form["seeking_description"]
     try:
-        venue = Venue(
-            name=name,
-            city=city,
-            state=state,
-            address=address,
-            phone=phone,
-            genres=genres,
-            facebook_link=facebook_link,
-            image_link=image_link,
-            website=website,
-            seeking_talent=seeking_talent,
-            seeking_description=seeking_description,
-        )
+        venue = Venue()
+        form.populate_obj(venue)
+        venue.created_date = datetime.now()
         db.session.add(venue)
         db.session.commit()
 
         flash("Venue " + request.form["name"] + " was successfully listed!")
-    except:
+    except ValueError as e:
         flash(
             "An error occurred. Venue " + request.form["name"] + " could not be listed."
         )
+        print(e)
         db.session.rollback()
     finally:
         db.session.close()
@@ -512,33 +460,11 @@ def create_artist_form():
 
 @app.route("/artists/create", methods=["POST"])
 def create_artist_submission():
-    name = request.form["name"]
-    city = request.form["city"]
-    state = request.form["state"]
-    phone = request.form["phone"]
-    genres = request.form.getlist("genres")
-    facebook_link = request.form["facebook_link"]
-    image_link = request.form["image_link"]
-    website = request.form["website_link"]
-    if "seeking_venue" in request.form:
-        seeking_venue = True
-    else:
-        seeking_venue = False
+    form = ArtistForm(request.form)
 
-    seeking_description = request.form["seeking_description"]
     try:
-        artist = Artist(
-            name=name,
-            city=city,
-            state=state,
-            phone=phone,
-            genres=genres,
-            facebook_link=facebook_link,
-            image_link=image_link,
-            website=website,
-            seeking_venue=seeking_venue,
-            seeking_description=seeking_description,
-        )
+        artist = Artist()
+        form.populate_obj(artist)
         db.session.add(artist)
         db.session.commit()
 
